@@ -1,0 +1,12 @@
+*.pkl
+*.joblib
+models/
+outputs/models/
+
+__pychache__/
+*.py[cod]
+*.ipynb_checkpoints/
+
+*.log
+*.csv
+temp/
