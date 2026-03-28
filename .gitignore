@@ -1,4 +1,5 @@
 *.pkl
+*.parquet
 *.joblib
 models/
 outputs/models/
