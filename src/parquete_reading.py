@@ -1,11 +1,15 @@
 import pandas as pd
-df_check = pd.read_parquet("../outputs/features.parquet")
 
-print("=== Structure ===")
-print(df_check.shape)
-print(df_check.dtypes)
+def read_parquet_info(path: str) -> None:
+    """Quick inspection of any parquet file."""
+    df = pd.read_parquet(path)
 
-print("\n=== First 5 rows ===")
-df_check.head()
-print("=== Descriptive characteristic ===")
-df_check.describe().round(3)
+    print("=== Structure ===")
+    print(f"Shape: {df.shape}")
+    print(df.dtypes)
+
+    print("\n=== First 5 rows ===")
+    print(df.head())
+
+    print("\n=== Descriptive statistics ===")
+    print(df.describe().round(3))
