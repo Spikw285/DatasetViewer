@@ -6,10 +6,10 @@ DATA_DIR = PROJECT_ROOT / "petrobras 3W main dataset"
 
 EVENTS = {
     0: "Normal",
-    3: "DHSV Failure",
-    4: "Severe Slugging",
+    3: "Severe Slugging",
+    4: "Flow Instability",
     7: "Scaling PCK",
-    9: "Hydrate",
+    9: "Hydrate in Service Line",
 }
 
 SENSORS = ["T-TPT", "P-TPT", "P-PDG", "P-MON-CKP", "T-JUS-CKP"]

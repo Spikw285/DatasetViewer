@@ -1,5 +1,4 @@
 import pandas as pd
-import numpy as np
 import pickle
 from pathlib import Path
 from sklearn.preprocessing import StandardScaler

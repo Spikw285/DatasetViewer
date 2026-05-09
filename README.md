@@ -1,62 +1,53 @@
-# DatasetViewer — Anomaly Detection for Oil Well Operations
+# DatasetViewer — Oil Well Anomaly Detection
 
-Проект для обнаружения аномалий в данных нефтяных скважин на основе датасета Petrobras 3W.
+Дипломный проект: обнаружение аномалий в данных нефтяных скважин на основе временных рядов датчиков.
+Датасет: **Petrobras 3W v2.0.0** (CC BY 4.0) — 998 реальных скважинных файлов, ~25 млн строк.
 
-## Цель
+## Задача
 
-Обучить классификаторы, которые по временным рядам датчиков скважины определяют, какое нежелательное событие происходит (или всё нормально). Пять классов:
+Бинарная классификация: нормальная работа скважины vs аномалия.
+Используется пять типов событий:
 
-| Класс | Описание |
-|-------|----------|
+| Код | Тип события |
+|-----|-------------|
 | 0 | Normal — штатная работа |
-| 3 | DHSV Failure — отказ клапана |
-| 4 | Severe Slugging — нестабильность потока |
-| 7 | Scaling PCK — минеральные отложения |
+| 3 | DHSV Failure — отказ скважинного клапана |
+| 4 | Severe Slugging — нестабильность газожидкостного потока |
+| 7 | Scaling PCK — минеральные отложения на штуцере |
 | 9 | Hydrate — гидратная пробка |
-
-## Датасет
-
-**Petrobras 3W Dataset v2.0.0** (CC BY 4.0)
-~895 parquet-файлов, ~22.5M строк, 5 сенсоров: `T-TPT`, `P-TPT`, `P-PDG`, `P-MON-CKP`, `T-JUS-CKP`
-Папка: `petrobras 3W main dataset/`
 
 ## Стек
 
-- Python 3.14, Jupyter Lab
-- pandas, numpy, scipy
-- scikit-learn, XGBoost
-- matplotlib
+- Python 3.12[^*], JupyterLab
+- pandas, numpy, scipy, scikit-learn, XGBoost
+- TensorFlow / Keras (LSTM)
+- Optuna (подбор гиперпараметров)
+- SHAP (объяснимость предсказаний)
+- matplotlib, seaborn
 
-## Структура
+[^*]: Изначально проект был написан на Python 3.14, однако из-за недоступности TensorFlow в этой версии нужно было произвести даунгрейд
+## Структура проекта
 
 ```
 src/
-  config.py          # константы: сенсоры, классы, размер окна
-  loader.py          # загрузка parquet-файлов датасета
-  preprocessor.py    # нормализация через StandardScaler
-  features.py        # извлечение признаков по скользящему окну
-  parquete_reading.py# утилита для просмотра parquet
+  config.py           # константы: сенсоры, классы событий, параметры окна
+  loader.py           # загрузка parquet-файлов с фильтрацией симулированных данных
+  preprocessor.py     # нормализация через StandardScaler (без утечки данных)
+  features.py         # извлечение признаков скользящим окном
 
 notebooks/
-  01_eda.ipynb       # EDA: загрузка, визуализация, нормализация
-  02_features.ipynb  # инженерия признаков (121 696 окон × 31 признак)
-  03_modeling.ipynb  # обучение и сравнение моделей
+  01_eda.ipynb                  # EDA: распределения, пропуски, временные ряды
+  02_features.ipynb             # разбивка train/test, нормализация, признаки
+  03_1_modeling_basic.ipynb     # базовые модели: RF и XGBoost
+  03_2_modeling_lstm.ipynb      # LSTM на сырых последовательностях
+  03_3_modeling_experiments.ipynb  # подбор гиперпараметров через Optuna
+  04_inference.ipynb            # инференс, пороговый анализ, SHAP
 
 outputs/
-  processed_data.parquet  # нормализованные данные
-  features.parquet        # матрица признаков
-  models/                 # обученные модели (.pkl)
-  figures/                # графики
-```
-
-## Пайплайн
-
-```
-01_eda.ipynb → processed_data.parquet + scaler.pkl
-      ↓
-02_features.ipynb → features.parquet
-      ↓
-03_modeling.ipynb → random_forest.pkl / xgboost.pkl / logistic_regression.pkl
+  raw_train.parquet / raw_test.parquet    # нормализованные сырые сигналы
+  features_train.parquet / features_test.parquet  # матрица признаков
+  models/                                 # обученные модели (.pkl, .keras)
+  figures/                                # графики
 ```
 
 ## Быстрый старт
@@ -66,23 +57,91 @@ outputs/
 .venv\Scripts\activate      # Windows
 # source .venv/bin/activate # Linux/Mac
 
+# Установить зависимости (если нужно)
+pip install -r requirements.txt
+
 # Запустить Jupyter
 jupyter lab
 
-# Открыть и запустить ноутбуки по порядку: 01 → 02 → 03
+# Запускать ноутбуки по порядку:
+# 01 → 02 → 03_1 (→ 03_2, 03_3 опционально) → 04
 ```
 
-## Ключевые параметры (config.py)
+> Датасет `petrobras 3W main dataset/` должен лежать в корне проекта.
+> Путь задаётся в `src/config.py` через `DATA_DIR`.
 
-| Параметр | Значение | Смысл |
-|----------|----------|-------|
-| `WINDOW_SIZE` | 60 | длина временного окна |
-| `WINDOW_STEP` | 30 | шаг окна (50% перекрытие) |
-| `RANDOM_STATE` | 42 | фиксация случайности |
+## Пайплайн
 
-## Обученные модели (outputs/models/)
+```
+01_eda.ipynb
+    ↓  (визуализация, понимание данных)
+02_features.ipynb
+    → outputs/raw_train.parquet, raw_test.parquet
+    → outputs/features_train.parquet, features_test.parquet
+    → outputs/models/scaler.pkl
+    ↓
+03_1_modeling_basic.ipynb
+    → random_forest_baseline.pkl, xgboost_baseline.pkl
+    ↓
+03_3_modeling_experiments.ipynb  (опционально)
+    → random_forest_tuned.pkl, xgboost_tuned.pkl
+    ↓
+03_2_modeling_lstm.ipynb  (опционально)
+    → lstm_baseline.keras
+    ↓
+04_inference.ipynb
+    → пороговый анализ, временная шкала аномалий, SHAP
+```
 
-- `random_forest.pkl` — основная модель (24 MB)
-- `xgboost.pkl` — альтернатива (649 KB)
-- `logistic_regression.pkl` — базовая линия (1.4 KB)
-- `scaler.pkl` — StandardScaler для нормализации входных данных
+## Ключевые параметры (src/config.py)
+
+| Параметр | Значение | Описание |
+|----------|----------|----------|
+| `WINDOW_SIZE` | 60 | длина скользящего окна (секунды) |
+| `WINDOW_STEP` | 30 | шаг окна — 50% перекрытие |
+| `RANDOM_STATE` | 42 | воспроизводимость |
+
+## Сенсоры
+
+Из пяти датчиков четыре используются в моделировании:
+
+| Датчик | Статус | Примечание |
+|--------|--------|------------|
+| T-TPT | используется | температура на устье — наиболее важный признак |
+| P-TPT | используется | давление в НКТ |
+| P-MON-CKP | используется | давление на манифольде |
+| T-JUS-CKP | используется | температура ниже штуцера, 35.6% пропусков |
+| P-PDG | исключён | мёртвый датчик — константный ноль во всех файлах |
+
+## Разбивка данных
+
+Разбивка выполняется по файлам скважин (`GroupShuffleSplit`) для предотвращения утечки данных:
+
+| Набор | Файлов | Окон |
+|-------|--------|------|
+| Train | 798 | 662,805 |
+| Test | 200 | 172,016 |
+
+**Важно:** случайная разбивка по строкам завышает ROC-AUC до ~0.999. Групповая разбивка по скважинам даёт честные ~0.962 (разница ~0.037 — из-за утечки).
+
+## Обученные модели
+
+| Модель | ROC-AUC | FN | FP |
+|--------|---------|----|----|
+| RF Baseline | 0.962 | 11,649 | 6,182 |
+| XGBoost Baseline | 0.966 | 12,051 | 6,367 |
+| RF Tuned (Optuna) | 0.963 | 7,787 | 8,947 |
+| XGBoost Tuned (Optuna) | 0.959 | 10,655 | 8,210 |
+| LSTM Baseline | ~0.880 | ~11,702 | ~14,397 |
+
+Критерий отбора — минимизация FN (пропущенных аномалий), т.к. в нефтегазовой отрасли пропуск события опаснее ложной тревоги.
+
+## Система рекомендаций (04_inference.ipynb)
+
+Трёхуровневая шкала на основе вероятности аномалии:
+
+| Уровень | Порог | Действие |
+|---------|-------|----------|
+| NORMAL | p < 0.30 | действий не требуется |
+| WATCH | 0.30 ≤ p < 0.50 | усиленный мониторинг |
+| ANOMALY | p ≥ 0.50 | немедленная проверка |
