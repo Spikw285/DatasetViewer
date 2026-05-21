@@ -1,147 +1,79 @@
-# DatasetViewer — Oil Well Anomaly Detection
+# Offshore Well Anomaly Detector
 
-Дипломный проект: обнаружение аномалий в данных нефтяных скважин на основе временных рядов датчиков.
-Датасет: **Petrobras 3W v2.0.0** (CC BY 4.0) — 998 реальных скважинных файлов, ~25 млн строк.
+Machine learning pipeline for anomaly detection in offshore oil well 
+sensor data, built on the [Petrobras 3W Dataset](https://github.com/petrobras/3W).
 
-## Задача
+## Overview
 
-Бинарная классификация: нормальная работа скважины vs аномалия.
-Используется пять типов событий:
+This repository contains the full source code for the diploma thesis:
+**"Modelling and Prediction of Key Parameters of Oil and Gas 
+Installations Using Machine Learning Based on Sensor Data"**  
+*Timur Kasymbekov, AITU, 2026*
 
-| Код | Тип события |
-|-----|-------------|
-| 0 | Normal — штатная работа |
-| 3 | DHSV Failure — отказ скважинного клапана |
-| 4 | Severe Slugging — нестабильность газожидкостного потока |
-| 7 | Scaling PCK — минеральные отложения на штуцере |
-| 9 | Hydrate — гидратная пробка |
+The pipeline implements:
+- Group-aware train/test splitting (GroupShuffleSplit) to prevent well-level data leakage
+- Sliding window feature extraction (60s window, 30s step, 24 features)
+- Comparative study: Random Forest, XGBoost (Optuna-tuned), and LSTM baseline
+- Three-tier recommendation system (NORMAL / WATCH / ANOMALY)
+- SHAP TreeExplainer for per-prediction feature attribution
+- Interactive Streamlit web application
 
-## Стек
+## Results
 
-- Python 3.12[^*], JupyterLab
-- pandas, numpy, scipy, scikit-learn, XGBoost
-- TensorFlow / Keras (LSTM)
-- Optuna (подбор гиперпараметров)
-- SHAP (объяснимость предсказаний)
-- matplotlib, seaborn
+| Model | ROC-AUC | FN | FP | F1-macro |
+|-------|---------|----|----|----------|
+| RF Baseline | 0.9616 | 11,649 | 6,182 | 0.8961 |
+| RF Tuned ✓ | 0.9633 | **7,787** | 8,947 | 0.9027 |
+| XGBoost Baseline | 0.9658 | 12,051 | 6,367 | 0.8926 |
+| XGBoost Tuned | 0.9583 | 9,195 | 7,106 | 0.9051 |
+| LSTM Baseline | 0.8795 | 11,702 | 14,397 | 0.85 |
 
-[^*]: Изначально проект был написан на Python 3.14, однако из-за недоступности TensorFlow в этой версии нужно было произвести даунгрейд
-## Структура проекта
+RF Tuned selected as final model (lowest false negative count).
 
+## Repository Structure
 ```
-src/
-  config.py           # константы: сенсоры, классы событий, параметры окна
-  loader.py           # загрузка parquet-файлов с фильтрацией симулированных данных
-  preprocessor.py     # нормализация через StandardScaler (без утечки данных)
-  features.py         # извлечение признаков скользящим окном
-
-notebooks/
-  01_eda.ipynb                  # EDA: распределения, пропуски, временные ряды
-  02_features.ipynb             # разбивка train/test, нормализация, признаки
-  03_1_modeling_basic.ipynb     # базовые модели: RF и XGBoost
-  03_2_modeling_lstm.ipynb      # LSTM на сырых последовательностях
-  03_3_modeling_experiments.ipynb  # подбор гиперпараметров через Optuna
-  04_inference.ipynb            # инференс, пороговый анализ, SHAP
-
-outputs/
-  raw_train.parquet / raw_test.parquet    # нормализованные сырые сигналы
-  features_train.parquet / features_test.parquet  # матрица признаков
-  models/                                 # обученные модели (.pkl, .keras)
-  figures/                                # графики
+src/ # Shared modules (loader, preprocessor, features, config)
+notebooks/        # Jupyter notebooks (run in order: 01 → 04)
+outputs/          # Generated at runtime — see Google Drive link below
+app.py            # Streamlit recommendation system
+requirements.txt
 ```
-
-## Быстрый старт
+## Quickstart
 
 ```bash
-# Активировать окружение
-.venv\Scripts\activate      # Windows
-# source .venv/bin/activate # Linux/Mac
-
-# Установить зависимости (если нужно)
+git clone https://github.com/Spikw285/DatasetViewer.git
+cd DatasetViewer
 pip install -r requirements.txt
 
-# Запустить Jupyter
-jupyter lab
+# Download pre-computed artefacts from Google Drive (see Appendix A)
+# Place in outputs/models/ and outputs/parquet_files/
 
-# Запускать ноутбуки по порядку:
-# 01 → 02 → 03_1 (→ 03_2, 03_3 опционально) → 04
+streamlit run app.py
 ```
 
-> Датасет `petrobras 3W main dataset/` должен лежать в корне проекта.
-> Путь задаётся в `src/config.py` через `DATA_DIR`.
+## Notebook Execution Order
 
-## Пайплайн
+| # | Notebook | Purpose |
+|---|----------|---------|
+| 01 | `01_eda.ipynb` | Exploratory data analysis |
+| 02 | `02_features.ipynb` | Feature extraction, group split |
+| 03_1 | `03_1_modeling_basic.ipynb` | RF and XGBoost baselines |
+| 03_2 | `03_2_modeling_lstm.ipynb` | LSTM baseline (GPU required) |
+| 03_3 | `03_3_modeling_experiments.ipynb` | Optuna tuning, SHAP analysis |
+| 04 | `04_inference.ipynb` | Inference demo, threshold analysis |
 
-```
-01_eda.ipynb
-    ↓  (визуализация, понимание данных)
-02_features.ipynb
-    → outputs/raw_train.parquet, raw_test.parquet
-    → outputs/features_train.parquet, features_test.parquet
-    → outputs/models/scaler.pkl
-    ↓
-03_1_modeling_basic.ipynb
-    → random_forest_baseline.pkl, xgboost_baseline.pkl
-    ↓
-03_3_modeling_experiments.ipynb  (опционально)
-    → random_forest_tuned.pkl, xgboost_tuned.pkl
-    ↓
-03_2_modeling_lstm.ipynb  (опционально)
-    → lstm_baseline.keras
-    ↓
-04_inference.ipynb
-    → пороговый анализ, временная шкала аномалий, SHAP
-```
+## Data
 
-## Ключевые параметры (src/config.py)
+Pre-computed feature matrices and trained models are available on 
+[Google Drive](https://drive.google.com/drive/folders/10pCQGke0bFdZ4FZ5aXWz_jCgJFSfR5YK).  
+Raw dataset: [Petrobras 3W GitHub](https://github.com/petrobras/3W)
 
-| Параметр | Значение | Описание |
-|----------|----------|----------|
-| `WINDOW_SIZE` | 60 | длина скользящего окна (секунды) |
-| `WINDOW_STEP` | 30 | шаг окна — 50% перекрытие |
-| `RANDOM_STATE` | 42 | воспроизводимость |
+## Environment
 
-## Сенсоры
+Python 3.12.13 · scikit-learn 1.6.1 · xgboost 3.2.0 · 
+tensorflow 2.20.0 · shap 0.51.0 · optuna 4.8.0
 
-Из пяти датчиков четыре используются в моделировании:
+## License
 
-| Датчик | Статус | Примечание |
-|--------|--------|------------|
-| T-TPT | используется | температура на устье — наиболее важный признак |
-| P-TPT | используется | давление в НКТ |
-| P-MON-CKP | используется | давление на манифольде |
-| T-JUS-CKP | используется | температура ниже штуцера, 35.6% пропусков |
-| P-PDG | исключён | мёртвый датчик — константный ноль во всех файлах |
-
-## Разбивка данных
-
-Разбивка выполняется по файлам скважин (`GroupShuffleSplit`) для предотвращения утечки данных:
-
-| Набор | Файлов | Окон |
-|-------|--------|------|
-| Train | 798 | 662,805 |
-| Test | 200 | 172,016 |
-
-**Важно:** случайная разбивка по строкам завышает ROC-AUC до ~0.999. Групповая разбивка по скважинам даёт честные ~0.962 (разница ~0.037 — из-за утечки).
-
-## Обученные модели
-
-| Модель | ROC-AUC | FN | FP |
-|--------|---------|----|----|
-| RF Baseline | 0.962 | 11,649 | 6,182 |
-| XGBoost Baseline | 0.966 | 12,051 | 6,367 |
-| RF Tuned (Optuna) | 0.963 | 7,787 | 8,947 |
-| XGBoost Tuned (Optuna) | 0.959 | 10,655 | 8,210 |
-| LSTM Baseline | ~0.880 | ~11,702 | ~14,397 |
-
-Критерий отбора — минимизация FN (пропущенных аномалий), т.к. в нефтегазовой отрасли пропуск события опаснее ложной тревоги.
-
-## Система рекомендаций (04_inference.ipynb)
-
-Трёхуровневая шкала на основе вероятности аномалии:
-
-| Уровень | Порог | Действие |
-|---------|-------|----------|
-| NORMAL | p < 0.30 | действий не требуется |
-| WATCH | 0.30 ≤ p < 0.50 | усиленный мониторинг |
-| ANOMALY | p ≥ 0.50 | немедленная проверка |
+Source code: MIT  
+Dataset: CC BY 4.0 (Petrobras)
