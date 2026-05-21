@@ -11,3 +11,5 @@ __pychache__/
 *.log
 *.csv
 temp/
+
+03_modeling_old.ipynb
