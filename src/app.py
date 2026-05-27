@@ -32,7 +32,7 @@ def download_artifacts():
 
     if not model_p.exists():
         gdown.download(
-            "https://drive.google.com/file/d/1pxqUCwW14c7EFGkTQHF7VA3_p0BMSr1g/view?usp=drive_link",
+            "https://drive.google.com/file/d/1-OapY3PzX2gbcu2-l3gvdmOfKIB8qorJ/view?usp=drive_link",
             str(model_p), quiet=False,
         )
         # Sanity check: pickle файлы начинаются с байта 0x80
