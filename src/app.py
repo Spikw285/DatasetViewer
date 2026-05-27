@@ -17,6 +17,33 @@ import shap
 import streamlit as st
 
 # =============================================================================
+# INITIAL CONFIG
+# =============================================================================
+
+@st.cache_resource(show_spinner="Downloading artifacts from Google Drive...")
+def download_artifacts():
+    model_p = Path("outputs/models/random_forest_tuned.pkl")
+    parquet_p = Path("outputs/features_test.parquet")
+    if model_p.exists() and parquet_p.exists():
+        return  # already have everything, skip
+
+    import gdown
+    Path("outputs/models").mkdir(parents=True, exist_ok=True)
+    if not model_p.exists():
+        gdown.download(
+            "https://drive.google.com/uc?id=1DXQAOUGH4TxQb56TUUOZci_f2uTx-Z47",
+            str(model_p), quiet=False
+        )
+    if not parquet_p.exists():
+        gdown.download(
+            "https://drive.google.com/uc?id=1CHf_eRNqBwLxlUNKQ1d78Jsxg1FhtfV4",
+            str(parquet_p), quiet=False
+        )
+
+# for now it's no use since nothing really uploads from google drive
+# download_artifacts()
+
+# =============================================================================
 # CONSTANTS
 # =============================================================================
 
@@ -30,6 +57,23 @@ EVENT_NAMES = {
     7: "Scaling in PCK",
     9: "Hydrate in Service Line",
 }
+
+SENSOR_LABELS = {
+    "P-TPT":     "Tubing P",
+    "T-TPT":     "Tubing T",
+    "P-MON-CKP": "Manifold P",
+    "T-JUS-CKP": "Downstream T",
+}
+
+STAT_LABELS = {
+    "mean": "average",
+    "std":  "variability",
+    "min":  "min",
+    "max":  "max",
+    "range": "range",
+    "trend": "trend"
+}
+
 
 TIER_COLORS = {
     "NORMAL":  "#059669",
@@ -59,7 +103,6 @@ st.set_page_config(
 
 st.markdown(f"""
 <style>
-  .stApp {{ background: #FFFFFF; }}
   .tier-badge {{
     padding: 24px;
     font-size: 42px;
@@ -118,6 +161,14 @@ def assign_tier(p: float, t_normal: float, t_anomaly: float) -> str:
     if p < t_anomaly:  return "WATCH"
     return "ANOMALY"
 
+def human_feature_name(col:str) -> str:
+    "P-TPT_mean -> Tubing Pressure (Pa) * average"
+    for sensor, label in SENSOR_LABELS.items():
+        if col.startswith(sensor + "_"):
+            stat = col[len(sensor) + 1:]
+            return f"{label} * {STAT_LABELS.get(stat, stat)}"
+    return col
+
 # =============================================================================
 # SIDEBAR
 # =============================================================================
@@ -127,6 +178,22 @@ with st.sidebar:
                 unsafe_allow_html=True)
 
     st.divider()
+    st.markdown("**Load data**")
+    uploaded_parquet = st.file_uploader(
+        "Upload features_test.parquet (Optional)",
+        type=["parquet"],
+        help="Upload a different test feature file to evaluate other wells"
+    )
+
+    st.divider()
+    st.markdown("**Filter wells by event type**")
+    available_types = [0, 3, 4, 7, 9]  # Hardcoded list since these types were used and expected to be used
+    selected_types = st.multiselect(
+        "Show only wells with:",
+        options=available_types,
+        default=available_types,
+        format_func=lambda x: EVENT_NAMES.get(int(x), '?'),
+    )
 
     data_dir = st.text_input(
         "Outputs directory",
@@ -156,21 +223,32 @@ with st.sidebar:
 # LOAD ARTIFACTS
 # =============================================================================
 
-data_dir_path  = Path(data_dir)
-model_path     = data_dir_path / "models" / "random_forest_tuned.pkl"
-features_path  = data_dir_path / "features_test.parquet"
+data_dir_path = Path(data_dir)
+model_path    = data_dir_path / "models" / "random_forest_tuned.pkl"
+features_path = data_dir_path / "features_test.parquet"
 
-missing = [p for p in [model_path, features_path] if not p.exists()]
-if missing:
-    st.error("**Missing artifacts.** Update the outputs directory in the sidebar.")
-    for p in missing:
-        st.code(str(p), language=None)
+# Model is always loaded from disk
+if not model_path.exists():
+    st.error("**Missing model artifact.** Update the outputs directory in the sidebar.")
+    st.code(str(model_path), language=None)
     st.stop()
 
 model = load_model(str(model_path))
-df_test, feature_cols = load_test_features(str(features_path))
 explainer = build_explainer(model)
 
+# Features: prefer uploaded file, fall back to disk
+if uploaded_parquet is not None:
+    import io
+    df_test = pd.read_parquet(io.BytesIO(uploaded_parquet.read()))
+    feature_cols = [c for c in df_test.columns
+                    if c not in ("label", "event_type", "source")
+                    and c not in DEAD_FEATURES]
+    st.success(f"📂 Using uploaded file: {uploaded_parquet.name} ({len(df_test):,} windows, {df_test['source'].nunique()} wells)")
+else:
+    if not features_path.exists():
+        st.error("No parquet found. Upload one via the sidebar or fix the outputs path.")
+        st.stop()
+    df_test, feature_cols = load_test_features(str(features_path))
 # =============================================================================
 # HEADER
 # =============================================================================
@@ -180,11 +258,22 @@ st.markdown(
     "Offshore Well Anomaly Detector</h1></div>",
     unsafe_allow_html=True,
 )
-st.caption(
-    "Machine-learning recommendation system for offshore oil-well sensor data. "
-    "Built on the Petrobras 3W dataset. Random Forest (Optuna-tuned) + SHAP "
-    "TreeExplainer + three-tier alerting."
-)
+with st.expander("ℹ️ What does this system do?", expanded=False):
+    st.markdown("""
+    This system monitors **offshore oil well sensors** and flags windows of time
+    where anomalous behaviour is likely — before it escalates into equipment failure.
+
+    **How to use it:**
+    1. Select a well from the dropdown below.
+    2. The timeline shows the model's confidence that each 60-second window is anomalous.
+    3. Click any point (or use the slider) to inspect *why* the model raised an alert — 
+       which sensor drove the prediction.
+
+    **Alert levels:**
+    - 🟢 **NORMAL** — no action needed
+    - 🟡 **WATCH** — monitor closely, early warning signs detected  
+    - 🔴 **ANOMALY** — immediate inspection recommended
+    """)
 st.divider()
 
 # =============================================================================
@@ -192,7 +281,13 @@ st.divider()
 # =============================================================================
 
 col_a, col_b = st.columns([3, 1])
-sources = sorted(df_test["source"].unique().tolist())
+
+filtered_df = df_test[df_test["event_type"].isin(selected_types)]
+sources = sorted(filtered_df["source"].unique().tolist())
+if not sources:
+    st.warning("No wells match the selected event types.")
+    st.stop()
+
 with col_a:
     source = st.selectbox(f"Select a well from the test set ({len(sources)} wells)", sources)
 with col_b:
@@ -220,7 +315,7 @@ c4.metric("🔴 ANOMALY",     int((tiers == "ANOMALY").sum()))
 
 st.markdown(
     f'<div class="header-bar"><h3 style="margin:0;">'
-    "Probability timeline · click any point to inspect</h3></div>",
+    "Probability timeline</h3></div>",
     unsafe_allow_html=True,
 )
 
@@ -281,6 +376,7 @@ fig.update_xaxes(showgrid=True, gridcolor="#F1F5F9")
 fig.update_yaxes(showgrid=True, gridcolor="#F1F5F9")
 
 st.plotly_chart(fig, use_container_width=True)
+
 if "label" in df_well.columns:
     st.caption("Pink-shaded regions = ground-truth anomaly windows from the test labels.")
 
@@ -294,15 +390,82 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-idx = st.slider(
-    "Window index", 0, len(df_well) - 1,
-    value=int(np.argmax(probs)),   # default to highest-probability window
-    help="Slide through the well's windows. The default is the most-anomalous window.",
-)
-x       = X_well[idx].reshape(1, -1)
-proba   = float(probs[idx])
-tier    = tiers[idx]
-color   = TIER_COLORS[tier]
+n_windows = len(df_well)
+
+# Сброс при смене скважины
+if st.session_state.get("last_source") != source:
+    st.session_state["slider_idx"] = int(np.argmax(probs))
+    st.session_state["number_idx"] = int(np.argmax(probs))
+    st.session_state["last_source"] = source
+
+# Инициализация если первый запуск
+if "slider_idx" not in st.session_state:
+    st.session_state["slider_idx"] = int(np.argmax(probs))
+    st.session_state["number_idx"] = int(np.argmax(probs))
+
+
+# Зажим в допустимый диапазон (на случай смены скважины с большим индексом)
+st.session_state["slider_idx"] = min(st.session_state["slider_idx"], n_windows - 1)
+st.session_state["number_idx"] = min(st.session_state["number_idx"], n_windows - 1)
+
+# Колбэки
+def set_idx(new_idx):
+    st.session_state["slider_idx"] = int(new_idx)
+    st.session_state["number_idx"] = int(new_idx)
+
+def sync_from_slider():
+    st.session_state["number_idx"] = st.session_state["slider_idx"]
+
+def sync_from_number():
+    st.session_state["slider_idx"] = st.session_state["number_idx"]
+
+# Кнопки быстрой навигации — ПЕРЕД слайдером
+b1, b2, b3, b4 = st.columns(4)
+with b1:
+    st.button("🔴 Most anomalous",
+              on_click=set_idx, args=(int(np.argmax(probs)),),
+              use_container_width=True)
+with b2:
+    watch_idxs = np.where(tiers == "WATCH")[0]
+    st.button("🟡 First WATCH",
+              on_click=set_idx,
+              args=(int(watch_idxs[0]) if len(watch_idxs) else 0,),
+              disabled=len(watch_idxs) == 0,
+              use_container_width=True)
+with b3:
+    st.button("⚠️ Near threshold",
+              on_click=set_idx,
+              args=(int(np.argmin(np.abs(probs - threshold_anomaly))),),
+              use_container_width=True)
+with b4:
+    st.button("🟢 Most normal",
+              on_click=set_idx, args=(int(np.argmin(probs)),),
+              use_container_width=True)
+
+# Слайдер + number input (без параметра value, всё через key)
+col_slider, col_num = st.columns([5, 1])
+with col_slider:
+    st.slider(
+        "Window index", 0, n_windows - 1,
+        key="slider_idx",
+        on_change=sync_from_slider,
+        help="Drag, click a point on the timeline above, or type an exact index →",
+    )
+with col_num:
+    st.number_input(
+        "Exact", 0, n_windows - 1, step=1,
+        key="number_idx",
+        on_change=sync_from_number,
+    )
+
+
+idx = st.session_state["slider_idx"]
+
+# Подготовка данных для текущего окна
+x        = X_well[idx].reshape(1, -1)
+proba    = float(probs[idx])
+tier     = tiers[idx]
+color    = TIER_COLORS[tier]
 true_lbl = int(df_well.iloc[idx]["label"]) if "label" in df_well.columns else None
 
 left, right = st.columns([1, 1])
@@ -347,7 +510,10 @@ with right:
     st.markdown("**SHAP — why this prediction?**")
     st.caption("Red bars push toward ANOMALY · Blue bars push toward NORMAL")
     shap_vals = get_shap_values(explainer, x)
-    df_shap = pd.DataFrame({"feature": feature_cols, "shap": shap_vals})
+    df_shap = pd.DataFrame({
+        "feature": [human_feature_name(c) for c in feature_cols],
+        "shap": shap_vals
+    })
     df_shap["abs"] = df_shap["shap"].abs()
     df_shap = df_shap.sort_values("abs", ascending=True).tail(10)
 
@@ -357,12 +523,13 @@ with right:
         orientation="h",
         marker=dict(color=[TIER_COLORS["ANOMALY"] if v > 0 else "#3B82F6" for v in df_shap["shap"]]),
         text=[f"{v:+.4f}" for v in df_shap["shap"]],
-        textposition="outside",
+        textposition="auto",
+        insidetextanchor="end",
         cliponaxis=False,
     ))
     fig_shap.add_vline(x=0, line_color=INK, line_width=1)
     fig_shap.update_layout(
-        height=380, margin=dict(l=0, r=20, t=10, b=20),
+        height=400, margin=dict(l=140, r=40, t=10, b=20),
         plot_bgcolor="white",
         xaxis_title="SHAP value",
         font=dict(family="Calibri, Arial"),
@@ -370,7 +537,6 @@ with right:
     fig_shap.update_xaxes(showgrid=True, gridcolor="#F1F5F9")
     fig_shap.update_yaxes(showgrid=False)
     st.plotly_chart(fig_shap, use_container_width=True)
-
 # =============================================================================
 # RAW FEATURE VALUES
 # =============================================================================
@@ -387,10 +553,9 @@ with st.expander("📋 Raw feature values for this window"):
 # FOOTER
 # =============================================================================
 
-st.divider()
 st.caption(
-    "Selected model: RF Tuned (Optuna, 20 trials, TPE sampler) · "
-    "Features: 24 (4 sensors × 6 stats) · "
-    "Split: GroupShuffleSplit by source file (798 train / 200 test) · "
+    "Selected model: RF Tuned (Optuna, 20 trials, TPE sampler)"
+    "Features: 24 (4 sensors × 6 stats)"
+    "Split: GroupShuffleSplit by source file (798 train / 200 test)"
     "Author: Timur Kasymbekov, AITU, June 2026"
 )

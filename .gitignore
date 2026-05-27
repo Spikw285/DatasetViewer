@@ -1,6 +1,7 @@
 *.pkl
 *.parquet
 *.joblib
+*.keras
 models/
 outputs/models/
 
