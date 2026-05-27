@@ -40,8 +40,7 @@ def download_artifacts():
             str(parquet_p), quiet=False
         )
 
-# for now it's no use since nothing really uploads from google drive
-# download_artifacts()
+download_artifacts()
 
 # =============================================================================
 # CONSTANTS
