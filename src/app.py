@@ -31,12 +31,12 @@ def download_artifacts():
     Path("outputs/models").mkdir(parents=True, exist_ok=True)
     if not model_p.exists():
         gdown.download(
-            "https://drive.google.com/uc?id=1DXQAOUGH4TxQb56TUUOZci_f2uTx-Z47",
+            "https://drive.google.com/drive/folders/1DXQAOUGH4TxQb56TUUOZci_f2uTx-Z47",
             str(model_p), quiet=False
         )
     if not parquet_p.exists():
         gdown.download(
-            "https://drive.google.com/uc?id=1CHf_eRNqBwLxlUNKQ1d78Jsxg1FhtfV4",
+            "https://drive.google.com/drive/folders/1CHf_eRNqBwLxlUNKQ1d78Jsxg1FhtfV4",
             str(parquet_p), quiet=False
         )
 
