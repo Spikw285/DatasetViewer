@@ -3,7 +3,7 @@
 *.joblib
 *.keras
 models/
-outputs/models/
+outputs/temp/models/
 
 __pychache__/
 *.py[cod]
@@ -11,6 +11,6 @@ __pychache__/
 
 *.log
 *.csv
-temp/
+outputs/temp/
 
 03_modeling_old.ipynb

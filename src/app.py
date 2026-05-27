@@ -25,20 +25,39 @@ def download_artifacts():
     model_p = Path("outputs/models/random_forest_tuned.pkl")
     parquet_p = Path("outputs/features_test.parquet")
     if model_p.exists() and parquet_p.exists():
-        return  # already have everything, skip
+        return
 
     import gdown
     Path("outputs/models").mkdir(parents=True, exist_ok=True)
+
     if not model_p.exists():
         gdown.download(
-            "https://drive.google.com/drive/folders/1DXQAOUGH4TxQb56TUUOZci_f2uTx-Z47",
-            str(model_p), quiet=False
+            "https://drive.google.com/file/d/1pxqUCwW14c7EFGkTQHF7VA3_p0BMSr1g/view?usp=drive_link",
+            str(model_p), quiet=False,
         )
+        # Sanity check: pickle файлы начинаются с байта 0x80
+        with open(model_p, "rb") as f:
+            head = f.read(2)
+        if head[:1] != b'\x80':
+            model_p.unlink()  # удалить мусор чтобы не закешировался
+            raise RuntimeError(
+                f"Downloaded model is not a valid pickle (got: {head}). "
+                "Check Google Drive sharing permissions for the model file."
+            )
+
     if not parquet_p.exists():
         gdown.download(
-            "https://drive.google.com/drive/folders/1CHf_eRNqBwLxlUNKQ1d78Jsxg1FhtfV4",
-            str(parquet_p), quiet=False
+            "https://drive.google.com/file/d/1SuW5BlFJcilbZB2ODdN43ApsDxwi73lM/view?usp=drive_link",
+            str(parquet_p), quiet=False,
         )
+        with open(parquet_p, "rb") as f:
+            head = f.read(4)
+        if head != b'PAR1':
+            parquet_p.unlink()
+            raise RuntimeError(
+                f"Downloaded parquet is not valid (got: {head}). "
+                "Check Google Drive sharing permissions for the parquet file."
+            )
 
 download_artifacts()
 
