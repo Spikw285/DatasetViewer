@@ -73,6 +73,9 @@ Raw dataset: [Petrobras 3W GitHub](https://github.com/petrobras/3W)
 Python 3.12.13 · scikit-learn 1.6.1 · xgboost 3.2.0 · 
 tensorflow 2.20.0 · shap 0.51.0 · optuna 4.8.0
 
+## Live Demo
+   You can try the app [here](https://datasetviewer.streamlit.app).
+
 ## License
 
 Source code: MIT  
