@@ -32,7 +32,7 @@ def download_artifacts():
     if not model_p.exists():
         gdown.download(
             "https://drive.google.com/file/d/1-OapY3PzX2gbcu2-l3gvdmOfKIB8qorJ/view?usp=drive_link",
-            str(model_p), quiet=False
+            str(model_p), quiet=False,
         )
     if not parquet_p.exists():
         gdown.download(
@@ -374,7 +374,13 @@ fig.update_layout(
 fig.update_xaxes(showgrid=True, gridcolor="#F1F5F9")
 fig.update_yaxes(showgrid=True, gridcolor="#F1F5F9")
 
-st.plotly_chart(fig, use_container_width=True)
+st.plotly_chart(
+    fig,
+    width="stretch",
+    config={
+        "scrollZoom": True,
+        "displayModeBar": False,
+    })
 
 if "label" in df_well.columns:
     st.caption("Pink-shaded regions = ground-truth anomaly windows from the test labels.")
@@ -418,23 +424,23 @@ b1, b2, b3, b4 = st.columns(4)
 with b1:
     st.button("🔴 Most anomalous",
               on_click=set_idx, args=(int(np.argmax(probs)),),
-              use_container_width=True)
+              width="stretch")
 with b2:
     watch_idxs = np.where(tiers == "WATCH")[0]
     st.button("🟡 First WATCH",
               on_click=set_idx,
               args=(int(watch_idxs[0]) if len(watch_idxs) else 0,),
               disabled=len(watch_idxs) == 0,
-              use_container_width=True)
+              width="stretch")
 with b3:
     st.button("⚠️ Near threshold",
               on_click=set_idx,
               args=(int(np.argmin(np.abs(probs - threshold_anomaly))),),
-              use_container_width=True)
+              width="stretch")
 with b4:
     st.button("🟢 Most normal",
               on_click=set_idx, args=(int(np.argmin(probs)),),
-              use_container_width=True)
+              width="stretch")
 
 col_slider, col_num = st.columns([5, 1])
 with col_slider:
@@ -488,7 +494,7 @@ with left:
     ))
     gauge.update_layout(height=260, margin=dict(l=0, r=0, t=30, b=0),
                         font=dict(family="Calibri, Arial"))
-    st.plotly_chart(gauge, use_container_width=True)
+    st.plotly_chart(gauge, width="stretch")
 
     if true_lbl is not None:
         truth_text = ("🔴 ANOMALY" if true_lbl == 1 else "🟢 NORMAL")
@@ -528,7 +534,7 @@ with right:
     )
     fig_shap.update_xaxes(showgrid=True, gridcolor="#F1F5F9")
     fig_shap.update_yaxes(showgrid=False)
-    st.plotly_chart(fig_shap, use_container_width=True)
+    st.plotly_chart(fig_shap, width="stretch")
 # =============================================================================
 # RAW FEATURE VALUES
 # =============================================================================
@@ -539,7 +545,7 @@ with st.expander("📋 Raw feature values for this window"):
         "Feature": feature_cols,
         "Scaled value": [row[c] for c in feature_cols],
     })
-    st.dataframe(feat_df, use_container_width=True, hide_index=True, height=300)
+    st.dataframe(feat_df, width="stretch", hide_index=True, height=300)
 
 # =============================================================================
 # FOOTER
