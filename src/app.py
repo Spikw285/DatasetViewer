@@ -47,7 +47,7 @@ def download_artifacts():
 
     if not parquet_p.exists():
         gdown.download(
-            "https://drive.google.com/file/d/1SuW5BlFJcilbZB2ODdN43ApsDxwi73lM/view?usp=drive_link",
+            "https://drive.google.com/file/d/1TarrQXkgpG6Ger5BeyVhKqb_A1jBRB52/view?usp=drive_link",
             str(parquet_p), quiet=False,
         )
         with open(parquet_p, "rb") as f:
