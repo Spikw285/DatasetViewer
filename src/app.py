@@ -25,39 +25,20 @@ def download_artifacts():
     model_p = Path("outputs/models/random_forest_tuned.pkl")
     parquet_p = Path("outputs/features_test.parquet")
     if model_p.exists() and parquet_p.exists():
-        return
+        return  # already have everything, skip
 
     import gdown
     Path("outputs/models").mkdir(parents=True, exist_ok=True)
-
     if not model_p.exists():
         gdown.download(
             "https://drive.google.com/file/d/1-OapY3PzX2gbcu2-l3gvdmOfKIB8qorJ/view?usp=drive_link",
-            str(model_p), quiet=False,
+            str(model_p), quiet=False
         )
-        # Sanity check: pickle файлы начинаются с байта 0x80
-        with open(model_p, "rb") as f:
-            head = f.read(2)
-        if head[:1] != b'\x80':
-            model_p.unlink()  # удалить мусор чтобы не закешировался
-            raise RuntimeError(
-                f"Downloaded model is not a valid pickle (got: {head}). "
-                "Check Google Drive sharing permissions for the model file."
-            )
-
     if not parquet_p.exists():
         gdown.download(
-            "https://drive.google.com/file/d/1SuW5BlFJcilbZB2ODdN43ApsDxwi73lM/view?usp=drive_link",
-            str(parquet_p), quiet=False,
+            "https://drive.google.com/file/d/1TarrQXkgpG6Ger5BeyVhKqb_A1jBRB52/view?usp=drive_link",
+            str(parquet_p), quiet=False
         )
-        with open(parquet_p, "rb") as f:
-            head = f.read(4)
-        if head != b'PAR1':
-            parquet_p.unlink()
-            raise RuntimeError(
-                f"Downloaded parquet is not valid (got: {head}). "
-                "Check Google Drive sharing permissions for the parquet file."
-            )
 
 download_artifacts()
 
@@ -393,13 +374,7 @@ fig.update_layout(
 fig.update_xaxes(showgrid=True, gridcolor="#F1F5F9")
 fig.update_yaxes(showgrid=True, gridcolor="#F1F5F9")
 
-st.plotly_chart(
-    fig,
-    width="stretch",
-    config={
-        "scrollZoom": True,
-        "displayModeBar": False,
-    })
+st.plotly_chart(fig, use_container_width=True)
 
 if "label" in df_well.columns:
     st.caption("Pink-shaded regions = ground-truth anomaly windows from the test labels.")
@@ -416,23 +391,19 @@ st.markdown(
 
 n_windows = len(df_well)
 
-# Сброс при смене скважины
 if st.session_state.get("last_source") != source:
     st.session_state["slider_idx"] = int(np.argmax(probs))
     st.session_state["number_idx"] = int(np.argmax(probs))
     st.session_state["last_source"] = source
 
-# Инициализация если первый запуск
 if "slider_idx" not in st.session_state:
     st.session_state["slider_idx"] = int(np.argmax(probs))
     st.session_state["number_idx"] = int(np.argmax(probs))
 
 
-# Зажим в допустимый диапазон (на случай смены скважины с большим индексом)
 st.session_state["slider_idx"] = min(st.session_state["slider_idx"], n_windows - 1)
 st.session_state["number_idx"] = min(st.session_state["number_idx"], n_windows - 1)
 
-# Колбэки
 def set_idx(new_idx):
     st.session_state["slider_idx"] = int(new_idx)
     st.session_state["number_idx"] = int(new_idx)
@@ -443,30 +414,28 @@ def sync_from_slider():
 def sync_from_number():
     st.session_state["slider_idx"] = st.session_state["number_idx"]
 
-# Кнопки быстрой навигации — ПЕРЕД слайдером
 b1, b2, b3, b4 = st.columns(4)
 with b1:
     st.button("🔴 Most anomalous",
               on_click=set_idx, args=(int(np.argmax(probs)),),
-              width="stretch")
+              use_container_width=True)
 with b2:
     watch_idxs = np.where(tiers == "WATCH")[0]
     st.button("🟡 First WATCH",
               on_click=set_idx,
               args=(int(watch_idxs[0]) if len(watch_idxs) else 0,),
               disabled=len(watch_idxs) == 0,
-              width="stretch")
+              use_container_width=True)
 with b3:
     st.button("⚠️ Near threshold",
               on_click=set_idx,
               args=(int(np.argmin(np.abs(probs - threshold_anomaly))),),
-              width="stretch")
+              use_container_width=True)
 with b4:
     st.button("🟢 Most normal",
               on_click=set_idx, args=(int(np.argmin(probs)),),
-              width="stretch")
+              use_container_width=True)
 
-# Слайдер + number input (без параметра value, всё через key)
 col_slider, col_num = st.columns([5, 1])
 with col_slider:
     st.slider(
@@ -485,7 +454,6 @@ with col_num:
 
 idx = st.session_state["slider_idx"]
 
-# Подготовка данных для текущего окна
 x        = X_well[idx].reshape(1, -1)
 proba    = float(probs[idx])
 tier     = tiers[idx]
@@ -520,7 +488,7 @@ with left:
     ))
     gauge.update_layout(height=260, margin=dict(l=0, r=0, t=30, b=0),
                         font=dict(family="Calibri, Arial"))
-    st.plotly_chart(gauge, width="stretch")
+    st.plotly_chart(gauge, use_container_width=True)
 
     if true_lbl is not None:
         truth_text = ("🔴 ANOMALY" if true_lbl == 1 else "🟢 NORMAL")
@@ -560,7 +528,7 @@ with right:
     )
     fig_shap.update_xaxes(showgrid=True, gridcolor="#F1F5F9")
     fig_shap.update_yaxes(showgrid=False)
-    st.plotly_chart(fig_shap, width="stretch")
+    st.plotly_chart(fig_shap, use_container_width=True)
 # =============================================================================
 # RAW FEATURE VALUES
 # =============================================================================
@@ -571,7 +539,7 @@ with st.expander("📋 Raw feature values for this window"):
         "Feature": feature_cols,
         "Scaled value": [row[c] for c in feature_cols],
     })
-    st.dataframe(feat_df, width="stretch", hide_index=True, height=300)
+    st.dataframe(feat_df, use_container_width=True, hide_index=True, height=300)
 
 # =============================================================================
 # FOOTER

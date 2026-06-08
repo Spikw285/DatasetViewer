@@ -9,7 +9,7 @@ from src.config import DATA_DIR, EVENTS, SENSORS, RANDOM_STATE
 def load_and_normalize(
     max_files_per_event: int = None,
     only_real: bool = True,
-    min_sensors: int = 2,          # понизили с 3 до 2 — поможет событию 9
+    min_sensors: int = 2,
     fit_scaler: bool = True,
     scaler_path: str = None,
 ) -> tuple[pd.DataFrame, StandardScaler]:
